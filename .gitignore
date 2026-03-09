@@ -1,0 +1,51 @@
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.cursor/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+logs/
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# MyPy
+.mypy_cache/

@@ -1,0 +1,76 @@
+# ============================================
+# Requirements - Agentes IA con LangChain v1.0
+# Autor: Ing. Kevin Inofuente Colque - DataPath
+# ============================================
+
+# Jupyter Notebooks
+ipykernel
+
+# ============================================
+# LANGCHAIN v1.0
+# ============================================
+langchain>=1.0.0
+langchain-openai          # Modelos OpenAI (GPT-4.1)
+langchain-community       # Tools y utilidades comunitarias
+langchain-text-splitters  # RecursiveCharacterTextSplitter y otros splitters
+
+# ============================================
+# HISTÓRICO DE CONVERSACIÓN (PostgreSQL)
+# ============================================
+langchain-postgres        # PostgresChatMessageHistory
+psycopg[binary]           # Driver PostgreSQL v3
+
+# ============================================
+# BASE DE CONOCIMIENTO (RAG con Supabase)
+# ============================================
+supabase>=1.0.0           # Cliente de Supabase
+numpy                     # Cálculo de similitud coseno
+
+# ============================================
+# BASE DE CONOCIMIENTO (RAG con Pinecone)
+# ============================================
+langchain-pinecone        # Integración LangChain + Pinecone
+pinecone                  # Cliente Pinecone
+pypdf>=3.0.0              # Loader de PDFs (PyPDFLoader)
+
+# ============================================
+# TOOLS
+# ============================================
+langchain-tavily          # Búsqueda en internet (Tavily) - Nueva API
+tavily-python             # Cliente base de Tavily
+
+# ============================================
+# WEB SERVER (Chatwoot Integration)
+# ============================================
+fastapi                   # Framework web
+uvicorn                   # Servidor ASGI
+requests                  # HTTP client
+
+# ============================================
+# UTILIDADES
+# ============================================
+python-dotenv             # Variables de entorno (.env)
+
+# ============================================
+# GUARDRAILS DE SEGURIDAD
+# ============================================
+
+# Capas 7 y 8 — LlamaGuard via Groq API
+# Requiere: GROQ_API_KEY en el archivo .env
+groq                      # Cliente Groq SDK (Llama Prompt Guard 2 + Llama Guard 4)
+
+# Capa 5 — PII Detection (Microsoft Presidio)
+# Instalar con: pip install presidio-analyzer presidio-anonymizer
+# Requiere modelo spacy: python -m spacy download es_core_news_sm
+presidio-analyzer         # Motor de detección de PII
+presidio-anonymizer       # Anonimización / enmascarado de PII
+spacy>=3.0.0              # NLP engine para Presidio
+
+# ============================================
+# OPCIONAL - Para notebooks y otros proyectos
+# ============================================
+# pypdf>=3.0.0            # Loader de PDFs
+# faiss-cpu               # Vector store local
+# chromadb                # Vector store ChromaDB
+# transformers            # Modelos Hugging Face
+# torch                   # PyTorch
