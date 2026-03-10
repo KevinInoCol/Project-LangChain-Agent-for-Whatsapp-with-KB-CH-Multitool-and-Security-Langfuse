@@ -52,6 +52,11 @@ requests                  # HTTP client
 python-dotenv             # Variables de entorno (.env)
 
 # ============================================
+# OBSERVABILIDAD Y MONITOREO
+# ============================================
+langfuse>=4.0.0           # Tracing, observabilidad y monitoreo de LLMs
+
+# ============================================
 # GUARDRAILS DE SEGURIDAD
 # ============================================
 
