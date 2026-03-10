@@ -26,6 +26,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Importar directamente el agente (sin rutas locales)
 from agente_basico_hc_bc_toolexterna_pinecone import chat_con_agente
 
+# Importar factory de la tool de handoff
+from tools.Transferir_humano import crear_tool_transferir_humano
+
 print("🤖 Cargando Agente D (Pinecone)...")
 print("✅ Agente D cargado correctamente")
 
@@ -144,90 +147,63 @@ async def chatwoot_webhook(request: Request):
     conversation_id = conversation.get('id')
     sender = data.get('sender', {})
     sender_type = sender.get('type', '')
-    
+    contact_id = sender.get('id')  # ID del contacto para el tag "ia-off"
+
     # Debug
     print(f"\n{'='*60}")
     print(f"📩 Webhook recibido: {event}")
-    print(f"   Conversación: {conversation_id}")
+    print(f"   Conversación: {conversation_id} | Contacto: {contact_id}")
     print(f"   Tipo: {message_type}")
     print(f"   Etiquetas: {labels}")
-    
+
     # Solo procesar mensajes entrantes (del usuario, no del bot)
     if event != 'message_created':
         return {"status": "ignored", "reason": "Not a message_created event"}
-    
+
     if message_type != 'incoming':
         return {"status": "ignored", "reason": "Not an incoming message"}
-    
-    # No responder si el usuario/conversación tiene el tag "ia-off"
+
+    # No responder si el contacto/conversación tiene el tag "ia-off"
     if TAG_IA_OFF in labels:
         print(f"   ⏭️  Ignorado: tiene tag '{TAG_IA_OFF}' (IA desactivada)")
-        return {"status": "ignored", "reason": f"User has tag '{TAG_IA_OFF}'"}
-    
+        return {"status": "ignored", "reason": f"Contact has tag '{TAG_IA_OFF}'"}
+
     if not message_content or not conversation_id:
         return {"status": "ignored", "reason": "Missing content or conversation_id"}
-    
+
     print(f"   📝 Mensaje: {message_content[:100]}...")
-    
-    # Detectar si el usuario quiere hablar con un humano
-    # Se usan frases completas para evitar falsos positivos con palabras sueltas como "agente"
-    human_keywords = [
-        'hablar con un humano',
-        'hablar con una persona',
-        'hablar con un asesor',
-        'hablar con un agente',
-        'hablar con alguien',
-        'quiero un asesor',
-        'necesito un asesor',
-        'quiero hablar con',
-        'comunícame con',
-        'comunícame con un',
-        'pasar con un asesor',
-        'transferir a un asesor',
-        'atención humana',
-        'soporte humano',
-        'un representante',
-    ]
-    if any(keyword in message_content.lower() for keyword in human_keywords):
-        print(f"   🗣️ Transferencia a humano detectada")
-        
-        # Actualizar etiquetas — agregar ia-off para que el bot deje de responder
-        new_labels = [l for l in labels if l != BOT_LABEL]
-        if TAG_IA_OFF not in new_labels:
-            new_labels.append(TAG_IA_OFF)
-        update_chatwoot_labels(conversation_id, new_labels)
-        
-        # Mensaje de despedida
-        handoff_message = "Entendido. Un asesor humano se pondrá en contacto contigo en breve. ¡Gracias por tu paciencia!"
-        send_chatwoot_message(conversation_id, handoff_message)
-        
-        return {"status": "success", "action": "human_handoff"}
-    
+
     # Procesar con el Agente D
     try:
         print(f"   🤖 Procesando con Agente D...")
-        
+
         # Convertir conversation_id a UUID para el historial
         session_id = conversation_id_to_uuid(conversation_id)
         print(f"   📝 Session ID: {session_id[:8]}...")
-        
-        # Llamar al agente
-        respuesta = chat_con_agente(message_content, session_id)
-        
+
+        # Crear la tool de handoff con contact_id y conversation_id inyectados
+        # Etiqueta AMBOS recursos: contacto (permanente) + conversación (webhook inmediato)
+        tools_extra = []
+        if contact_id and conversation_id:
+            tools_extra.append(crear_tool_transferir_humano(contact_id, conversation_id))
+            print(f"   🔧 Tool 'transferir_a_humano' lista (contacto={contact_id}, conv={conversation_id})")
+
+        # Llamar al agente con la tool dinámica de handoff
+        respuesta = chat_con_agente(message_content, session_id, tools_extra=tools_extra)
+
         print(f"   ✅ Respuesta generada ({len(respuesta)} chars)")
-        
+
         # Enviar respuesta a Chatwoot
         send_chatwoot_message(conversation_id, respuesta)
-        
+
         return {"status": "success", "action": "agent_response"}
-        
+
     except Exception as e:
         print(f"   ❌ Error al procesar: {e}")
-        
-        # Enviar mensaje de error
+
         error_message = "Disculpa, tuve un problema al procesar tu consulta. Un asesor te atenderá pronto."
         send_chatwoot_message(conversation_id, error_message)
-        
+
         return {"status": "error", "message": str(e)}
 
 
@@ -239,7 +215,7 @@ def read_root():
         "version": "1.0.0",
         "agent": "Agente D (RAG + Internet + Memoria)",
         "model": "GPT-4.1",
-        "tools": ["buscar_datapath", "buscar_internet", "obtener_fecha_hora"],
+        "tools": ["buscar_datapath", "buscar_internet", "obtener_fecha_hora", "transferir_a_humano"],
         "chatwoot_configured": all([CHATWOOT_BASE_URL, CHATWOOT_ACCOUNT_ID, CHATWOOT_API_TOKEN]),
         "bot_label": BOT_LABEL,
         "status": "ready"
@@ -256,42 +232,6 @@ def health_check():
     }
 
 
-@app.post("/test")
-async def test_agent(request: Request):
-    """
-    Endpoint de prueba para testear el agente sin Chatwoot.
-    
-    Body: {"message": "tu pregunta", "session_id": "opcional"}
-    """
-    data = await request.json()
-    message = data.get('message', '')
-    session_id = data.get('session_id', str(uuid.uuid4()))
-    
-    if not message:
-        return {"error": "Debes proporcionar un 'message' en el body"}
-    
-    print(f"\n🧪 TEST - Mensaje: {message}")
-    print(f"   Session: {session_id[:8]}...")
-    
-    try:
-        respuesta = chat_con_agente(message, session_id)
-        print(f"   ✅ Respuesta: {respuesta[:100]}...")
-        
-        return {
-            "message": message,
-            "session_id": session_id,
-            "response": respuesta,
-            "status": "success"
-        }
-    except Exception as e:
-        print(f"   ❌ Error: {e}")
-        return {
-            "message": message,
-            "error": str(e),
-            "status": "error"
-        }
-
-
 # ============================================
 # MAIN
 # ============================================
@@ -302,7 +242,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"🤖 Agente: D (RAG + Internet + Memoria)")
     print(f"🧠 Modelo: GPT-4.1")
-    print(f"🔧 Tools: buscar_datapath, buscar_internet, obtener_fecha_hora")
+    print(f"🔧 Tools: buscar_datapath, buscar_internet, obtener_fecha_hora, transferir_a_humano")
     print(f"💾 Historial: PostgreSQL")
     print(f"🏷️  Etiqueta bot (handoff): {BOT_LABEL or 'ninguna'}")
     print(f"🚫 No responde si tiene tag: {TAG_IA_OFF}")

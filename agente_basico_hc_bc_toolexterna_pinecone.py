@@ -94,6 +94,7 @@ Al inicio de cada turno se te indica la FECHA Y HORA ACTUAL; úsala cuando la re
 1. buscar_datapath: Para información interna de DATAPATH (programas, cursos, precios, docentes, inscripciones)
 2. buscar_internet: Para buscar información de DATAPATH en internet (reseñas, menciones, comparativas del sector de formación en IA en Perú). La búsqueda siempre se realiza en el contexto de DATAPATH automáticamente.
 3. obtener_fecha_hora: Para la fecha y hora actual
+4. transferir_a_humano: Para transferir la conversación a un asesor humano y desactivar la IA
 </Herramientas>
 
 <Instrucciones>
@@ -104,6 +105,7 @@ Al inicio de cada turno se te indica la FECHA Y HORA ACTUAL; úsala cuando la re
 - Si la pregunta no es sobre DATAPATH, rechaza amablemente usando el Mensaje de Rechazo
 - Recuerdas toda la conversación gracias a tu memoria persistente
 - Responde siempre en español de manera clara, profesional y amigable
+- Si el usuario pide hablar con un humano, asesor o representante → USA transferir_a_humano INMEDIATAMENTE y luego informa al usuario que un asesor le atenderá pronto
 </Instrucciones>
 
 <Ejemplos_Si>
@@ -112,6 +114,8 @@ Al inicio de cada turno se te indica la FECHA Y HORA ACTUAL; úsala cuando la re
 - "¿Cuánto cuesta el programa de IA?" → Usa buscar_datapath
 - "¿Cuándo empieza el próximo módulo?" → Usa buscar_datapath + obtener_fecha_hora
 - "¿Tienen buenas reseñas?" → Usa buscar_internet
+- "Quiero hablar con un asesor" → Usa transferir_a_humano
+- "Necesito atención personalizada / un humano / una persona real" → Usa transferir_a_humano
 </Ejemplos_Si>
 
 <Ejemplos_No>
@@ -152,10 +156,20 @@ def get_session_history(session_id: str) -> PostgresChatMessageHistory:
 # ============================================
 # 7. FUNCIÓN DE CHAT CON AGENTE + TOOLS
 # ============================================
-def chat_con_agente(mensaje_usuario: str, session_id: str) -> str:
+def chat_con_agente(
+    mensaje_usuario: str,
+    session_id: str,
+    tools_extra: list | None = None,
+) -> str:
     """
     Ejecuta el agente con tools y memoria.
     El agente decide si usar herramientas o responder directamente.
+
+    Args:
+        mensaje_usuario: Mensaje del usuario.
+        session_id:      UUID de la sesión/conversación (para historial).
+        tools_extra:     Tools adicionales por turno (ej. transferir_a_humano
+                         con contact_id inyectado desde el webhook).
     """
     # ── Capa 1 de Seguridad: Guardrail de Entrada ──────────────────
     es_seguro, motivo = verificar_input_guardrail(mensaje_usuario)
@@ -164,10 +178,14 @@ def chat_con_agente(mensaje_usuario: str, session_id: str) -> str:
         return respuesta_bloqueada(motivo)
     # ───────────────────────────────────────────────────────────────
 
+    # Combinar tools base con tools dinámicas del turno
+    tools_turno = tools + (tools_extra or [])
+    chat_turno = chat.bind_tools(tools_turno)
+
     # Obtener historial
     history = get_session_history(session_id)
     mensajes_previos = history.messages
-    
+
     # Construir mensajes para el modelo (inyectamos fecha/hora actual en cada turno)
     system_content = (
         system_prompt
@@ -175,57 +193,52 @@ def chat_con_agente(mensaje_usuario: str, session_id: str) -> str:
         + _contexto_fecha_hora()
     )
     messages = [{"role": "system", "content": system_content}]
-    
+
     # Agregar historial
     for msg in mensajes_previos:
         if isinstance(msg, HumanMessage):
             messages.append({"role": "user", "content": msg.content})
         elif isinstance(msg, AIMessage):
             messages.append({"role": "assistant", "content": msg.content})
-    
+
     # Agregar mensaje actual
     messages.append({"role": "user", "content": mensaje_usuario})
-    
+
     # Invocar modelo con tools
-    response = chat_con_tools.invoke(messages)
-    
+    response = chat_turno.invoke(messages)
+
     # Procesar tool calls si existen
     if response.tool_calls:
-        # Ejecutar cada tool
         tool_results = []
         for tool_call in response.tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
-            
-            # Buscar y ejecutar la tool
-            for t in tools:
+
+            for t in tools_turno:
                 if t.name == tool_name:
                     result = t.invoke(tool_args)
                     tool_results.append({
                         "tool_call_id": tool_call["id"],
-                        "result": result
+                        "result": result,
                     })
                     break
-        
-        # Agregar respuesta del modelo con tool calls y resultados
+
         messages.append(response)
         for tr in tool_results:
             messages.append(ToolMessage(
                 content=tr["result"],
-                tool_call_id=tr["tool_call_id"]
+                tool_call_id=tr["tool_call_id"],
             ))
-        
-        # Segunda llamada para obtener respuesta final
-        final_response = chat_con_tools.invoke(messages)
+
+        final_response = chat_turno.invoke(messages)
         respuesta_final = final_response.content
     else:
-        # Sin tool calls, respuesta directa
         respuesta_final = response.content
-    
+
     # Guardar en historial
     history.add_user_message(mensaje_usuario)
     history.add_ai_message(respuesta_final)
-    
+
     return respuesta_final
 
 
