@@ -165,7 +165,7 @@ def _contexto_fecha_hora() -> str:
 # Ventaja: puedes cambiar el prompt desde la UI sin tocar código ni reiniciar el servidor
 # Desventaja: el prompt sale del repo y no puedes editarlo con vibe coding en Cursor
 # ============================================
-lf_prompt = langfuse_client.get_prompt("Prompt-del-Agente-para-Whatsapp-v1")
+lf_prompt = langfuse_client.get_prompt("Prompt-del-Agente-para-Whatsapp-v2")
 system_prompt = lf_prompt.compile()   # sin variables; si tuvieras usa compile(var=valor)
 print(f"📝 Prompt cargado desde Langfuse: versión {lf_prompt.version}")
 
