@@ -12,7 +12,6 @@ import os
 import sys
 import uuid
 from datetime import datetime
-from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv, find_dotenv
@@ -24,8 +23,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
-from langchain_postgres import PostgresChatMessageHistory
-import psycopg
 
 # LANGFUSE ▶ Importar cliente singleton, decorador @observe y propagación de atributos
 from langfuse import Langfuse, get_client, observe, propagate_attributes
@@ -43,24 +40,11 @@ from guardrails.input_guardrail import verificar_input_guardrail, respuesta_bloq
 # Importar evaluador LLM-as-a-Judge (módulo evaluation/)
 from evaluation.llm_judge import evaluar_con_llm_judge
 
-# ============================================
-# 1. CONFIGURACIÓN DE BASE DE DATOS (Histórico)
-# ============================================
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "postgres")
+# Importar histórico de conversación (PostgreSQL) desde chat_history/
+from chat_history import crear_tabla_historial, get_session_history
 
-if not all([DB_USER, DB_PASSWORD, DB_HOST]):
-    raise ValueError(
-        "❌ Faltan variables de base de datos en .env\n"
-        "Requeridas: DB_USER, DB_PASSWORD, DB_HOST"
-    )
-
-DATABASE_URL = f"postgresql://{DB_USER}:{quote_plus(DB_PASSWORD)}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-print(f"🔌 Conectando como: {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+# Importar config del modelo (desacoplada del código) desde model_config/
+from model_config import load_model_config
 
 # ============================================
 # LANGFUSE: INICIALIZACIÓN DEL CLIENTE
@@ -84,7 +68,12 @@ tools = [
 # ============================================
 # 3. CONFIGURACIÓN DEL MODELO CON TOOLS
 # ============================================
-chat = init_chat_model("gpt-4.1", temperature=0.7)
+# La config del LLM vive en model_config/model.yaml
+_model_cfg = load_model_config()
+chat = init_chat_model(
+    _model_cfg["llm"]["model"],
+    temperature=_model_cfg["llm"]["temperature"],
+)
 chat_con_tools = chat.bind_tools(tools)
 
 # ============================================
@@ -170,31 +159,13 @@ system_prompt = lf_prompt.compile()   # sin variables; si tuvieras usa compile(v
 print(f"📝 Prompt cargado desde Langfuse: versión {lf_prompt.version}")
 
 # ============================================
-# 5. CREAR TABLA DE HISTORIAL
+# 5. CREAR TABLA DE HISTORIAL (chat_history/)
 # ============================================
-def crear_tabla_historial():
-    try:
-        sync_connection = psycopg.connect(DATABASE_URL)
-        PostgresChatMessageHistory.create_tables(sync_connection, "chat_history")
-        sync_connection.close()
-    except Exception as e:
-        print(f"⚠️ Nota sobre tabla: {e}")
-
+# El backend de persistencia vive en chat_history/postgres_store.py
 crear_tabla_historial()
 
 # ============================================
-# 6. HISTÓRICO DE CONVERSACIÓN
-# ============================================
-def get_session_history(session_id: str) -> PostgresChatMessageHistory:
-    sync_connection = psycopg.connect(DATABASE_URL)
-    return PostgresChatMessageHistory(
-        "chat_history",
-        session_id,
-        sync_connection=sync_connection
-    )
-
-# ============================================
-# 7. FUNCIÓN DE CHAT CON AGENTE + TOOLS + LANGFUSE
+# 6. FUNCIÓN DE CHAT CON AGENTE + TOOLS + LANGFUSE
 # ============================================
 # LANGFUSE ▶ @observe() convierte esta función en un Trace raíz en Langfuse.
 #             Cada llamada a chat_con_agente() generará una traza independiente
@@ -276,7 +247,7 @@ def chat_con_agente(
         session_id=session_id,                               # LANGFUSE v4 ▶ agrupa trazas por conversación
         user_id=f"conv-{session_id[:8]}",                    # LANGFUSE v4 ▶ identifica al usuario en métricas
         tags=["produccion", "chatwoot", "databot"],          # LANGFUSE v4 ▶ etiquetas para filtrar
-        metadata={"modelo": "gpt-4.1"},                      # LANGFUSE v4 ▶ dict[str,str] obligatorio en v4
+        metadata={"modelo": _model_cfg["llm"]["model"]},     # LANGFUSE v4 ▶ dict[str,str] obligatorio en v4
     ):
         # LANGFUSE ▶ config={"callbacks": [langfuse_handler]} activa el tracing en esta
         #             invocación: captura el prompt, la respuesta, los tokens y la latencia.
@@ -334,7 +305,7 @@ def chat_con_agente(
 
 
 # ============================================
-# 8. LOOP DE CONVERSACIÓN
+# 7. LOOP DE CONVERSACIÓN
 # ============================================
 def main():
     print("=" * 60)
