@@ -162,7 +162,7 @@ class HybridSafetyService:
         skip_categories = skip_categories or []
 
         try:
-            result = self._call_model("meta-llama/llama-guard-4-12b", message)
+            result = self._call_model("openai/gpt-oss-safeguard-20b", message)
 
             if result.lower().startswith("unsafe"):
                 raw_categories = result.replace("unsafe", "").strip().split(",")
