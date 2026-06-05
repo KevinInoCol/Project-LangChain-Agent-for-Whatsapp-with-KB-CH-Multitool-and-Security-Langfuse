@@ -1,0 +1,16 @@
+meta:
+  name: databot-llm
+  version: 1.0.0
+  description: Configuración del LLM y memoria para el agente DataBot (DATAPATH).
+  updated_at: 2026-06-05
+  author: Ing. Kevin Inofuente Colque - DataPath
+
+llm:
+  provider: openai
+  model: gpt-4.1          # modelo por defecto del proyecto
+  temperature: 0.7
+  # max_tokens, top_p, timeout — comentados hasta que se necesiten
+
+memory:
+  token_limit: 3000
+  table_name: chat_history   # tabla del histórico en PostgreSQL

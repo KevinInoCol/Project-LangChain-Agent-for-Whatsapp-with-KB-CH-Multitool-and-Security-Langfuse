@@ -6,6 +6,9 @@
 # Jupyter Notebooks
 ipykernel
 
+# Config desacoplada (model_config/model.yaml, prompt/system_prompt.yaml)
+PyYAML                    # Carga de configuración y prompts en YAML
+
 # ============================================
 # LANGCHAIN v1.0
 # ============================================

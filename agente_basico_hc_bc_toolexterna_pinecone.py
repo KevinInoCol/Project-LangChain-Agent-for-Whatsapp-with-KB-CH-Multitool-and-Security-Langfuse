@@ -11,7 +11,6 @@ import os
 import sys
 import uuid
 from datetime import datetime
-from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv, find_dotenv
@@ -23,8 +22,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
-from langchain_postgres import PostgresChatMessageHistory
-import psycopg
 
 # Importar tools desde la carpeta tools/
 from tools.Base_de_conocimiento import buscar_datapath
@@ -34,27 +31,15 @@ from tools.Hora_y_fecha import obtener_fecha_hora
 # Importar guardrail de entrada (Capa 1 de Seguridad)
 from guardrails.input_guardrail import verificar_input_guardrail, respuesta_bloqueada
 
-# ============================================
-# 1. CONFIGURACIÓN DE BASE DE DATOS (Histórico)
-# ============================================
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "postgres")
+# Importar histórico de conversación (PostgreSQL) desde chat_history/
+from chat_history import crear_tabla_historial, get_session_history
 
-if not all([DB_USER, DB_PASSWORD, DB_HOST]):
-    raise ValueError(
-        "❌ Faltan variables de base de datos en .env\n"
-        "Requeridas: DB_USER, DB_PASSWORD, DB_HOST"
-    )
-
-DATABASE_URL = f"postgresql://{DB_USER}:{quote_plus(DB_PASSWORD)}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-print(f"🔌 Conectando como: {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+# Importar config del modelo y system prompt (desacoplados del código)
+from model_config import load_model_config
+from prompt import load_system_prompt
 
 # ============================================
-# 2. LISTA DE TOOLS DISPONIBLES
+# 1. LISTA DE TOOLS DISPONIBLES
 # ============================================
 tools = [
     buscar_datapath,      # Base de conocimiento DATAPATH
@@ -63,13 +48,18 @@ tools = [
 ]
 
 # ============================================
-# 3. CONFIGURACIÓN DEL MODELO CON TOOLS
+# 2. CONFIGURACIÓN DEL MODELO CON TOOLS
 # ============================================
-chat = init_chat_model("gpt-4.1", temperature=0.7)
+# La config del LLM vive en model_config/model.yaml
+_model_cfg = load_model_config()
+chat = init_chat_model(
+    _model_cfg["llm"]["model"],
+    temperature=_model_cfg["llm"]["temperature"],
+)
 chat_con_tools = chat.bind_tools(tools)
 
 # ============================================
-# 4. PROMPT DEL AGENTE + CONTEXTO FECHA/HORA
+# 3. PROMPT DEL AGENTE + CONTEXTO FECHA/HORA
 # ============================================
 AGENT_TIMEZONE = os.getenv("AGENT_TIMEZONE", "America/Lima")
 
@@ -84,77 +74,17 @@ def _contexto_fecha_hora() -> str:
     return now.strftime("%Y-%m-%d %H:%M:%S") + f" (zona {AGENT_TIMEZONE})"
 
 
-system_prompt = """Eres DataBot, el asistente virtual oficial de DATAPATH — escuela de formación en Inteligencia Artificial y tecnología.
-
-Tu ÚNICO propósito es responder consultas relacionadas con DATAPATH: programas, cursos, precios, modalidades, docentes, inscripciones, fechas de inicio, beneficios y cualquier información institucional.
-
-Al inicio de cada turno se te indica la FECHA Y HORA ACTUAL; úsala cuando la respuesta dependa de "hoy", "ahora", "esta semana", horarios o plazos. Para otras zonas horarias usa la tool obtener_fecha_hora.
-
-<Herramientas>
-1. buscar_datapath: Para información interna de DATAPATH (programas, cursos, precios, docentes, inscripciones)
-2. buscar_internet: Para buscar información de DATAPATH en internet (reseñas, menciones, comparativas del sector de formación en IA en Perú). La búsqueda siempre se realiza en el contexto de DATAPATH automáticamente.
-3. obtener_fecha_hora: Para la fecha y hora actual
-4. transferir_a_humano: Para transferir la conversación a un asesor humano y desactivar la IA
-</Herramientas>
-
-<Instrucciones>
-- Para preguntas sobre DATAPATH → USA buscar_datapath PRIMERO; si no hay suficiente info, complementa con buscar_internet
-- Para "qué hora es", "qué día es hoy" → USA obtener_fecha_hora
-- Para saludos y despedidas → Responde directamente, pero redirige amablemente al tema DATAPATH
-- NUNCA respondas preguntas de cultura general, noticias, política, deportes, ciencia u otros temas ajenos a DATAPATH
-- Si la pregunta no es sobre DATAPATH, rechaza amablemente usando el Mensaje de Rechazo
-- Recuerdas toda la conversación gracias a tu memoria persistente
-- Responde siempre en español de manera clara, profesional y amigable
-- Si el usuario pide hablar con un humano, asesor o representante → USA transferir_a_humano INMEDIATAMENTE y luego informa al usuario que un asesor le atenderá pronto
-</Instrucciones>
-
-<Ejemplos_Si>
-- "Hola" → Saluda y ofrece ayuda con DATAPATH
-- "¿Qué cursos tienen?" → Usa buscar_datapath
-- "¿Cuánto cuesta el programa de IA?" → Usa buscar_datapath
-- "¿Cuándo empieza el próximo módulo?" → Usa buscar_datapath + obtener_fecha_hora
-- "¿Tienen buenas reseñas?" → Usa buscar_internet
-- "Quiero hablar con un asesor" → Usa transferir_a_humano
-- "Necesito atención personalizada / un humano / una persona real" → Usa transferir_a_humano
-</Ejemplos_Si>
-
-<Ejemplos_No>
-- "¿Qué día son las elecciones en Perú?" → Rechaza: no es un tema de DATAPATH
-- "¿Qué pasó hoy en las noticias?" → Rechaza: no es un tema de DATAPATH
-- "¿Cuál es la capital de Francia?" → Rechaza: no es un tema de DATAPATH
-- "Explícame cómo funciona Python" → Rechaza: para eso están los cursos de DATAPATH
-</Ejemplos_No>
-
-<Mensaje_de_Rechazo>
-Esa consulta está fuera de mi ámbito. Soy DataBot y estoy especializado en información sobre los programas y servicios de DATAPATH. ¿Te puedo ayudar con información sobre nuestros cursos, precios, fechas de inicio o inscripciones?
-</Mensaje_de_Rechazo>"""
+# El system prompt vive en prompt/system_prompt.yaml
+system_prompt = load_system_prompt()
 
 # ============================================
-# 5. CREAR TABLA DE HISTORIAL
+# 4. CREAR TABLA DE HISTORIAL (chat_history/)
 # ============================================
-def crear_tabla_historial():
-    try:
-        sync_connection = psycopg.connect(DATABASE_URL)
-        PostgresChatMessageHistory.create_tables(sync_connection, "chat_history")
-        sync_connection.close()
-    except Exception as e:
-        print(f"⚠️ Nota sobre tabla: {e}")
-
+# El backend de persistencia vive en chat_history/postgres_store.py
 crear_tabla_historial()
 
 # ============================================
-# 6. HISTÓRICO DE CONVERSACIÓN
-# ============================================
-def get_session_history(session_id: str) -> PostgresChatMessageHistory:
-    sync_connection = psycopg.connect(DATABASE_URL)
-    return PostgresChatMessageHistory(
-        "chat_history",
-        session_id,
-        sync_connection=sync_connection
-    )
-
-# ============================================
-# 7. FUNCIÓN DE CHAT CON AGENTE + TOOLS
+# 5. FUNCIÓN DE CHAT CON AGENTE + TOOLS
 # ============================================
 def chat_con_agente(
     mensaje_usuario: str,
@@ -243,7 +173,7 @@ def chat_con_agente(
 
 
 # ============================================
-# 8. LOOP DE CONVERSACIÓN
+# 6. LOOP DE CONVERSACIÓN
 # ============================================
 def main():
     print("=" * 60)
