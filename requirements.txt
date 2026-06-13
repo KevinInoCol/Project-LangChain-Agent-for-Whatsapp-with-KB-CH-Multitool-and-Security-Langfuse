@@ -50,6 +50,13 @@ uvicorn                   # Servidor ASGI
 requests                  # HTTP client
 
 # ============================================
+# BUFFER DE MENSAJES (Redis)
+# ============================================
+# Acumula mensajes seguidos del usuario y los concatena en una sola respuesta.
+# Incluye el cliente asíncrono redis.asyncio (>=5.0).
+redis>=5.0
+
+# ============================================
 # UTILIDADES
 # ============================================
 python-dotenv             # Variables de entorno (.env)

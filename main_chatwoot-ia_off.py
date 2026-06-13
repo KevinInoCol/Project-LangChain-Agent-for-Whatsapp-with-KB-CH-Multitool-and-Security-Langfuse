@@ -8,6 +8,7 @@ Autor: Ing. Kevin Inofuente Colque - DataPath
 import os
 import sys
 import uuid
+import asyncio
 import logging
 import requests
 from dotenv import load_dotenv, find_dotenv
@@ -28,6 +29,9 @@ from agente_basico_hc_bc_toolexterna_pinecone_Langfuse import chat_con_agente
 
 # Importar factory de la tool de handoff
 from tools.Transferir_humano import crear_tool_transferir_humano
+
+# Buffer de mensajes (concatena mensajes seguidos en una sola respuesta)
+from message_buffer import encolar_mensaje, BUFFER_ENABLED, BUFFER_WINDOW_SECONDS
 
 print("🤖 Cargando Agente D (Pinecone)...")
 print("✅ Agente D cargado correctamente")
@@ -120,6 +124,30 @@ def conversation_id_to_uuid(conversation_id: int) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatwoot-{conversation_id}"))
 
 
+def ejecutar_agente_y_responder(
+    conversation_id: int,
+    contact_id: int,
+    mensaje: str,
+) -> str:
+    """
+    Ejecuta el agente para un mensaje (o la concatenación de varios) y envía
+    la respuesta a Chatwoot. Es síncrono: se ejecuta en un hilo aparte para
+    no bloquear el event loop de FastAPI.
+    """
+    session_id = conversation_id_to_uuid(conversation_id)
+
+    # Crear la tool de handoff con contact_id y conversation_id inyectados
+    tools_extra = []
+    if contact_id and conversation_id:
+        tools_extra.append(crear_tool_transferir_humano(contact_id, conversation_id))
+
+    respuesta = chat_con_agente(mensaje, session_id, tools_extra=tools_extra)
+    print(f"   ✅ Respuesta generada ({len(respuesta)} chars)")
+
+    send_chatwoot_message(conversation_id, respuesta)
+    return respuesta
+
+
 # ============================================
 # FASTAPI APP
 # ============================================
@@ -175,27 +203,25 @@ async def chatwoot_webhook(request: Request):
 
     # Procesar con el Agente D
     try:
+        # ── Modo BUFFER: acumular mensajes seguidos y responder UNA sola vez ──
+        # Si el usuario manda "hola", "todo bien?", "tengo una consulta" seguidos,
+        # se concatenan en Redis y el agente responde una sola vez tras la ventana.
+        if BUFFER_ENABLED:
+            async def _procesar_concatenacion(conv_id: int, mensaje_concatenado: str) -> None:
+                print(f"   🤖 Procesando concatenación (conv={conv_id})...")
+                await asyncio.to_thread(
+                    ejecutar_agente_y_responder, conv_id, contact_id, mensaje_concatenado
+                )
+
+            await encolar_mensaje(conversation_id, message_content, _procesar_concatenacion)
+            print(f"   🪣 Mensaje en buffer (ventana de {BUFFER_WINDOW_SECONDS:g}s)")
+            return {"status": "buffered", "conversation_id": conversation_id}
+
+        # ── Modo directo: responder mensaje por mensaje (buffer desactivado) ──
         print(f"   🤖 Procesando con Agente D...")
-
-        # Convertir conversation_id a UUID para el historial
-        session_id = conversation_id_to_uuid(conversation_id)
-        print(f"   📝 Session ID: {session_id[:8]}...")
-
-        # Crear la tool de handoff con contact_id y conversation_id inyectados
-        # Etiqueta AMBOS recursos: contacto (permanente) + conversación (webhook inmediato)
-        tools_extra = []
-        if contact_id and conversation_id:
-            tools_extra.append(crear_tool_transferir_humano(contact_id, conversation_id))
-            print(f"   🔧 Tool 'transferir_a_humano' lista (contacto={contact_id}, conv={conversation_id})")
-
-        # Llamar al agente con la tool dinámica de handoff
-        respuesta = chat_con_agente(message_content, session_id, tools_extra=tools_extra)
-
-        print(f"   ✅ Respuesta generada ({len(respuesta)} chars)")
-
-        # Enviar respuesta a Chatwoot
-        send_chatwoot_message(conversation_id, respuesta)
-
+        await asyncio.to_thread(
+            ejecutar_agente_y_responder, conversation_id, contact_id, message_content
+        )
         return {"status": "success", "action": "agent_response"}
 
     except Exception as e:
