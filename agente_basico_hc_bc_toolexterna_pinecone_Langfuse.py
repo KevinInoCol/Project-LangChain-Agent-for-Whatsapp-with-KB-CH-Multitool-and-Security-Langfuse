@@ -24,8 +24,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-# LANGFUSE ▶ Importar cliente singleton, decorador @observe y propagación de atributos
-from langfuse import Langfuse, get_client, observe, propagate_attributes
+# LANGFUSE ▶ Importar decorador @observe y propagación de atributos
+from langfuse import observe, propagate_attributes
 # LANGFUSE ▶ Importar el CallbackHandler que intercepta todas las llamadas de LangChain
 from langfuse.langchain import CallbackHandler
 
@@ -46,15 +46,8 @@ from chat_history import crear_tabla_historial, get_session_history
 # Importar config del modelo (desacoplada del código) desde model_config/
 from model_config import load_model_config
 
-# ============================================
-# LANGFUSE: INICIALIZACIÓN DEL CLIENTE
-# ============================================
-# LANGFUSE ▶ Lee LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY y LANGFUSE_BASE_URL desde .env
-# LANGFUSE ▶ Crea el cliente Singleton una sola vez al arrancar el módulo
-Langfuse()
-# LANGFUSE ▶ get_client() devuelve la instancia Singleton ya inicializada
-langfuse_client = get_client()
-print(f"📊 Langfuse conectado: {os.getenv('LANGFUSE_BASE_URL', 'https://cloud.langfuse.com')}")
+# LANGFUSE ▶ Cliente Langfuse singleton (Langfuse() + get_client() → observability/)
+from observability.langfuse_setup import langfuse_client
 
 # ============================================
 # 2. LISTA DE TOOLS DISPONIBLES

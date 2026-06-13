@@ -17,7 +17,7 @@ load_dotenv(find_dotenv())
 # CONFIGURACIÓN DE PINECONE
 # ============================================
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "langchain-pinecone-asistente-de-ventas")
+INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "langchain-pinecone-asistente-de-ventas-ai15")
 
 if not PINECONE_API_KEY:
     raise ValueError(
