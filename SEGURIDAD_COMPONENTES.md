@@ -41,7 +41,7 @@ Mensaje del usuario
 │  CAPA 4 — Custom Regex (ReDoS-safe)               │
 │  CAPA 5 — PII Detection / Presidio (LOCAL)        │
 │  CAPA 7 — Llama Prompt Guard 2 (GROQ / META IA)  │
-│  CAPA 8 — Llama Guard 4 (GROQ / META IA)         │
+│  CAPA 8 — GPT-OSS-Safeguard (GROQ / OpenAI)      │
 │  CAPA 6 — URL Filter (REGEX)                      │
 └───────────────────────────────────────────────────┘
         │ (solo si pasa todas las capas)
@@ -302,16 +302,18 @@ Groq tiene una arquitectura de hardware especializada (LPU — Language Processi
 
 ---
 
-## Capa 8 — Llama Guard 4 (IA de Meta via Groq)
+## Capa 8 — GPT-OSS-Safeguard (IA de OpenAI via Groq)
 
-**Tecnología:** Modelo de IA de Meta ejecutado en la infraestructura de Groq  
-**Modelo:** `meta-llama/llama-guard-4-12b`  
-**Tamaño:** 12 mil millones de parámetros  
+**Tecnología:** Modelo de IA de OpenAI ejecutado en la infraestructura de Groq  
+**Modelo:** `openai/gpt-oss-safeguard-20b`  
+**Tamaño:** 20 mil millones de parámetros  
 **Velocidad:** Moderada (modelo grande, análisis profundo)  
+
+> **Nota:** Este modelo reemplaza a **Llama Guard 4** (`meta-llama/llama-guard-4-12b`), deprecado en Groq el **2026-03-05**. GPT-OSS-Safeguard aporta capacidades de razonamiento y moderación con soporte *bring-your-own-policy* para flujos de Trust & Safety.
 
 ### ¿Qué es?
 
-**Llama Guard 4** es un modelo de inteligencia artificial desarrollado por **Meta** para clasificar contenido dañino en sistemas de IA conversacional. A diferencia de la capa 7 que solo detecta ataques de prompt injection, Llama Guard 4 analiza el **contenido del mensaje** en sí mismo para detectar si pertenece a alguna categoría de daño.
+**GPT-OSS-Safeguard** es un modelo de inteligencia artificial desarrollado por **OpenAI** para clasificar contenido dañino en sistemas de IA conversacional. A diferencia de la capa 7 que solo detecta ataques de prompt injection, GPT-OSS-Safeguard analiza el **contenido del mensaje** en sí mismo para detectar si pertenece a alguna categoría de daño.
 
 ### ¿Qué detecta? — 13 Categorías de Riesgo
 
@@ -334,7 +336,7 @@ Groq tiene una arquitectura de hardware especializada (LPU — Language Processi
 ### ¿Cómo funciona?
 
 1. El mensaje del usuario se envía a la **API de Groq**
-2. Groq ejecuta el modelo `llama-guard-4-12b` sobre el mensaje
+2. Groq ejecuta el modelo `gpt-oss-safeguard-20b` sobre el mensaje
 3. El modelo responde:
    - `safe` → el mensaje es seguro, pasa al agente
    - `unsafe\nS1, S10` → el mensaje es dañino, se indica qué categorías viola
@@ -367,7 +369,7 @@ El sistema permite configurar categorías a ignorar (`skip_categories`). Por eje
 | 5 | PII Detection | Microsoft Presidio + REGEX | DNI, RUC, email, teléfono, tarjetas | No (local) |
 | 6 | URL Filter | REGEX | Links, acortadores, dominios maliciosos | No |
 | 7 | Llama Prompt Guard 2 | Meta IA via Groq (86M params) | Jailbreak e injection detectados por IA | Sí (Groq API) |
-| 8 | Llama Guard 4 | Meta IA via Groq (12B params) | 13 categorías de contenido dañino | Sí (Groq API) |
+| 8 | GPT-OSS-Safeguard | OpenAI IA via Groq (20B params) | 13 categorías de contenido dañino | Sí (Groq API) |
 
 ---
 
@@ -376,7 +378,7 @@ El sistema permite configurar categorías a ignorar (`skip_categories`). Por eje
 El sistema aplica el principio de seguridad **"Defense in Depth"** (Defensa en Profundidad): en lugar de depender de una sola capa de protección, se usan múltiples capas independientes con tecnologías diferentes.
 
 - Si un atacante evade los patrones REGEX con errores ortográficos, la IA de Meta (capa 7) lo detecta
-- Si el contenido es nuevo y no está en ningún patrón, Llama Guard 4 (capa 8) lo clasifica
+- Si el contenido es nuevo y no está en ningún patrón, GPT-OSS-Safeguard (capa 8) lo clasifica
 - Si la API de Groq no está disponible, las capas REGEX siguen funcionando
 - Si Presidio no está instalado, la capa 5 usa regex como fallback
 

@@ -54,7 +54,7 @@ El pipeline de seguridad valida **cada mensaje entrante** antes de llegar al age
 | 5 | Presidio (Microsoft) | PII: DNI, RUC, email, teléfono peruano |
 | 6 | REGEX | URLs, acortadores y dominios en blacklist |
 | 7 | Llama Prompt Guard 2 (Groq) | Jailbreak/injection por IA (86M params, 8 idiomas) |
-| 8 | Llama Guard 4 (Groq) | NSFW, violencia, odio, autolesión — 13 categorías (12B params) |
+| 8 | GPT-OSS-Safeguard (Groq) | NSFW, violencia, odio, autolesión — 13 categorías (20B params) |
 
 ---
 

@@ -19,8 +19,9 @@
 6. Llama Prompt Guard 2 (GROQ API)
 - Detección de Jailbreak/Injection mediante IA (86M params, 8 idiomas)
 
-7. Llama Guard 4 (GROQ API)
-- Clasificación NSFW / Violencia / Odio / Autolesión (12B params)
+7. GPT-OSS-Safeguard (GROQ API)
+- Clasificación NSFW / Violencia / Odio / Autolesión (20B params)
+- Reemplaza a Llama Guard 4 (llama-guard-4-12b), deprecado en Groq el 2026-03-05
 
 8. URL Filter (REGEX)
 - Modos: off / whitelist / blacklist — Soporte a wildcards y dominios acortadores

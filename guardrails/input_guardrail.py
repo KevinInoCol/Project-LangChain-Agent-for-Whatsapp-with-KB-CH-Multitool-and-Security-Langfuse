@@ -9,7 +9,7 @@ Pipeline de validación (8 capas activas):
   5. PII Detection    (LOCAL)    — DNI, RUC, Email, Teléfono PE
   6. URL Filter       (REGEX)    — URLs, acortadores y dominios maliciosos
   7. Llama Prompt Guard 2 (GROQ) — Detección de jailbreak/injection por IA
-  8. Llama Guard 4    (GROQ)     — Clasificación NSFW / Violencia / Odio / Autolesión
+  8. GPT-OSS-Safeguard(GROQ)     — Clasificación NSFW / Violencia / Odio / Autolesión
 
 Patrones en inglés (EN) y español (ES).
 
@@ -477,17 +477,17 @@ class InputGuardrail:
             return False, ""
 
     # ----------------------------------------------------------
-    # Capa 8: Llama Guard 4 — NSFW / Hate / Violence / Self-Harm
+    # Capa 8: GPT-OSS-Safeguard — NSFW / Hate / Violence / Self-Harm
     # ----------------------------------------------------------
     def _check_llama_guard(self, texto: str) -> Tuple[bool, str]:
         if self._safety is None:
-            logger.debug("[GUARDRAIL 8] Saltado — LlamaGuard no disponible (sin GROQ_API_KEY o error de init)")
+            logger.debug("[GUARDRAIL 8] Saltado — GPT-OSS-Safeguard no disponible (sin GROQ_API_KEY o error de init)")
             return False, ""
         try:
-            logger.info(f"[GUARDRAIL 8] Evaluando con Llama Guard 4...")
+            logger.info(f"[GUARDRAIL 8] Evaluando con GPT-OSS-Safeguard...")
             bloqueado, motivo = self._safety.validate_toxicity(texto, fail_close=True)
             if not bloqueado:
-                logger.info("[GUARDRAIL 8] ✅ SAFE — mensaje pasó Llama Guard 4")
+                logger.info("[GUARDRAIL 8] ✅ SAFE — mensaje pasó GPT-OSS-Safeguard")
             return bloqueado, motivo
         except Exception as e:
             logger.error(f"[GUARDRAIL 8] Error en Llama Guard: {e}")
@@ -530,7 +530,7 @@ class InputGuardrail:
             self._check_custom,            # Capa 4: Custom Regex (ReDoS-safe)
             self._check_pii,               # Capa 5: PII Detection (Presidio)
             self._check_prompt_guard,      # Capa 7: Llama Prompt Guard 2 (Groq)
-            self._check_llama_guard,       # Capa 8: Llama Guard 4 (Groq)
+            self._check_llama_guard,       # Capa 8: GPT-OSS-Safeguard (Groq)
             self._check_urls,              # Capa 6: URL Filter (al final, más lento)
         ]:
             bloqueado, motivo = check(texto)
