@@ -23,7 +23,7 @@ Un agente de IA en producción (atendiendo clientes reales por WhatsApp) necesit
 
 ### Integración en el proyecto
 
-Langfuse se integró en el archivo `agente_basico_hc_bc_toolexterna_pinecone_Langfuse.py` (el cerebro del agente) y en el módulo `evaluation/llm_judge.py` (el sistema de evaluación automática).
+Langfuse se integró en el archivo `agente_sec_langfuse.py` (el cerebro del agente) y en el módulo `evaluation/llm_judge.py` (el sistema de evaluación automática).
 
 ---
 
@@ -69,7 +69,7 @@ Usuario envía mensaje por WhatsApp
 ## Componente 1 — Observabilidad (Tracing)
 
 **Tecnología:** Langfuse Python SDK v4 + LangChain CallbackHandler  
-**Archivo principal:** `agente_basico_hc_bc_toolexterna_pinecone_Langfuse.py`  
+**Archivo principal:** `agente_sec_langfuse.py`  
 **Visibilidad en UI:** Langfuse → Tracing
 
 ### ¿Qué es el Tracing?

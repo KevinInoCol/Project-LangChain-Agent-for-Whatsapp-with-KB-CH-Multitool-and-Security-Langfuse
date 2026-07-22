@@ -25,7 +25,7 @@ load_dotenv(find_dotenv())
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Importar directamente el agente (sin rutas locales)
-from agente_basico_hc_bc_toolexterna_pinecone_Langfuse import chat_con_agente
+from agente_sec_langfuse import chat_con_agente
 
 # Importar factory de la tool de handoff
 from tools.Transferir_humano import crear_tool_transferir_humano

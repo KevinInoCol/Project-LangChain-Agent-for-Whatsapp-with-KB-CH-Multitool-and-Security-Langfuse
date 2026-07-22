@@ -66,7 +66,7 @@ El pipeline de seguridad valida **cada mensaje entrante** antes de llegar al age
 ```
 .
 ├── main_chatwoot-ia_off.py                  # Webhook FastAPI + lógica Chatwoot
-├── agente_basico_hc_bc_toolexterna_pinecone.py  # Agente principal (tools + memoria)
+├── agente_sec.py                            # Agente principal (tools + memoria)
 ├── tools/
 │   ├── Base_de_conocimiento.py              # Tool RAG con Pinecone
 │   ├── Busqueda_internet.py                 # Tool Tavily
@@ -157,7 +157,7 @@ Endpoints disponibles:
 ### Modo consola (sin Chatwoot)
 
 ```bash
-python agente_basico_hc_bc_toolexterna_pinecone.py
+python agente_sec.py
 ```
 
 ---

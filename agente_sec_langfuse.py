@@ -22,7 +22,8 @@ load_dotenv(find_dotenv())
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage
 
 # LANGFUSE ▶ Importar decorador @observe y propagación de atributos
 from langfuse import observe, propagate_attributes
@@ -36,6 +37,9 @@ from tools.Hora_y_fecha import obtener_fecha_hora
 
 # Importar guardrail de entrada (Capa 1 de Seguridad)
 from guardrails.input_guardrail import verificar_input_guardrail, respuesta_bloqueada
+
+# Importar el PIIMiddleware nativo de LangChain (guardrails/middleware.py)
+from guardrails.middleware import crear_pii_middlewares
 
 # Importar evaluador LLM-as-a-Judge (módulo evaluation/)
 from evaluation.llm_judge import evaluar_con_llm_judge
@@ -67,7 +71,6 @@ chat = init_chat_model(
     _model_cfg["llm"]["model"],
     temperature=_model_cfg["llm"]["temperature"],
 )
-chat_con_tools = chat.bind_tools(tools)
 
 # ============================================
 # 4. PROMPT DEL AGENTE + CONTEXTO FECHA/HORA
@@ -201,34 +204,32 @@ def chat_con_agente(
 
     # Combinar tools base con tools dinámicas del turno
     tools_turno = tools + (tools_extra or [])
-    chat_turno = chat.bind_tools(tools_turno)
 
-    # LANGFUSE ▶ Crear el CallbackHandler que intercepta cada llamada al LLM de LangChain.
-    #             Al crearse dentro del contexto de @observe(), hereda automáticamente
-    #             el trace padre y anida todas las observaciones bajo él.
-    langfuse_handler = CallbackHandler()
-
-    # Obtener historial
-    history = get_session_history(session_id)
-    mensajes_previos = history.messages
-
-    # Construir mensajes para el modelo (inyectamos fecha/hora actual en cada turno)
+    # Inyectar la fecha/hora actual en el system prompt de este turno
     system_content = (
         system_prompt
         + "\n\n---\nFECHA Y HORA ACTUAL (referencia para este turno): "
         + _contexto_fecha_hora()
     )
-    messages = [{"role": "system", "content": system_content}]
 
-    # Agregar historial
-    for msg in mensajes_previos:
-        if isinstance(msg, HumanMessage):
-            messages.append({"role": "user", "content": msg.content})
-        elif isinstance(msg, AIMessage):
-            messages.append({"role": "assistant", "content": msg.content})
+    # Agente LangChain v1: create_agent maneja el loop de tools internamente
+    # y ejecuta el PIIMiddleware (Capa 5b) antes/después de llamar al modelo.
+    # Se construye por turno para refrescar la fecha/hora y las tools dinámicas.
+    agente = create_agent(
+        model=chat,
+        tools=tools_turno,
+        system_prompt=system_content,
+        middleware=crear_pii_middlewares(),
+    )
 
-    # Agregar mensaje actual
-    messages.append({"role": "user", "content": mensaje_usuario})
+    # LANGFUSE ▶ CallbackHandler que intercepta cada llamada del grafo (LLM + tools).
+    #             Al crearse dentro de @observe(), anida sus observaciones bajo el trace padre.
+    langfuse_handler = CallbackHandler()
+
+    # Memoria: historial de Postgres cargado como mensajes (sin checkpointer,
+    # para conservar el backend actual de chat_history/).
+    history = get_session_history(session_id)
+    input_messages = list(history.messages) + [HumanMessage(content=mensaje_usuario)]
 
     # LANGFUSE v4 ▶ propagate_attributes() es el único método para atributos de correlación.
     #               En v4, 'update_current_trace()' fue eliminado; los atributos ahora viven
@@ -242,39 +243,15 @@ def chat_con_agente(
         tags=["produccion", "chatwoot", "databot"],          # LANGFUSE v4 ▶ etiquetas para filtrar
         metadata={"modelo": _model_cfg["llm"]["model"]},     # LANGFUSE v4 ▶ dict[str,str] obligatorio en v4
     ):
-        # LANGFUSE ▶ config={"callbacks": [langfuse_handler]} activa el tracing en esta
-        #             invocación: captura el prompt, la respuesta, los tokens y la latencia.
-        response = chat_turno.invoke(messages, config={"callbacks": [langfuse_handler]})
-
-        # Procesar tool calls si existen
-        if response.tool_calls:
-            tool_results = []
-            for tool_call in response.tool_calls:
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-
-                for t in tools_turno:
-                    if t.name == tool_name:
-                        result = t.invoke(tool_args)
-                        tool_results.append({
-                            "tool_call_id": tool_call["id"],
-                            "result": result,
-                        })
-                        break
-
-            messages.append(response)
-            for tr in tool_results:
-                messages.append(ToolMessage(
-                    content=tr["result"],
-                    tool_call_id=tr["tool_call_id"],
-                ))
-
-            # LANGFUSE ▶ Segunda llamada al LLM (respuesta final tras ejecutar tools).
-            #             También trackeada: captura tokens de la respuesta final.
-            final_response = chat_turno.invoke(messages, config={"callbacks": [langfuse_handler]})
-            respuesta_final = final_response.content
-        else:
-            respuesta_final = response.content
+        # LANGFUSE ▶ config={"callbacks": [langfuse_handler]} activa el tracing de TODO el
+        #             grafo del agente: llamadas al LLM, ejecución de tools y respuesta final
+        #             (tokens, costo y latencia de cada paso).
+        resultado = agente.invoke(
+            {"messages": input_messages},
+            config={"callbacks": [langfuse_handler]},
+        )
+        # create_agent devuelve el estado final; el último mensaje es la respuesta.
+        respuesta_final = resultado["messages"][-1].content
 
     # LANGFUSE v4 ▶ set_current_trace_io()
     #               Registra el input/output del turno completo a nivel del trace raíz.

@@ -107,8 +107,8 @@ Queues de revisión manual para que el equipo de DATAPATH evalúe conversaciones
 ```
 .
 ├── main_chatwoot-ia_off.py                          # Webhook FastAPI + lógica Chatwoot
-├── agente_basico_hc_bc_toolexterna_pinecone_Langfuse.py  # Agente con Langfuse
-├── agente_basico_hc_bc_toolexterna_pinecone.py      # Agente sin Langfuse (referencia)
+├── agente_sec_langfuse.py                           # Agente con Langfuse
+├── agente_sec.py                                    # Agente sin Langfuse (referencia)
 ├── tools/
 │   ├── __init__.py
 │   ├── Base_de_conocimiento.py                      # Tool RAG con Pinecone
@@ -209,7 +209,7 @@ Endpoints disponibles:
 ### Modo consola (sin Chatwoot)
 
 ```bash
-python agente_basico_hc_bc_toolexterna_pinecone_Langfuse.py
+python agente_sec_langfuse.py
 ```
 
 ---
