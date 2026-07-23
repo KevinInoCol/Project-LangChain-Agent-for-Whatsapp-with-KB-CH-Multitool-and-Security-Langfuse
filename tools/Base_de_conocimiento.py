@@ -10,6 +10,7 @@ Autor: Ing. Kevin Inofuente Colque - DataPath
 """
 
 import os
+from urllib.parse import urlparse
 from dotenv import load_dotenv, find_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.tools import tool
@@ -22,24 +23,33 @@ load_dotenv(find_dotenv())
 # ============================================
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "datapath")
+COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME")
 
 if not QDRANT_URL:
     raise ValueError(
         "❌ Falta variable QDRANT_URL en .env "
-        "(ej. https://tu-servidor-qdrant:6333)"
+        "(ej. https://tu-servidor-qdrant o http://IP:6333)"
     )
+
+# Normalizar URL y puerto. qdrant-client, si la URL no trae puerto, asume 6333.
+# Pero los despliegues detrás de proxy HTTPS (EasyPanel/Nginx/Caddy) exponen el
+# 443, no el 6333 → daría "Connection refused". Resolvemos el puerto según el
+# esquema: 443 para https sin puerto, 6333 para http sin puerto.
+_qdrant_url = QDRANT_URL.rstrip("/")
+_parsed = urlparse(_qdrant_url)
+_qdrant_port = _parsed.port or (443 if _parsed.scheme == "https" else 6333)
 
 embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
-# Conectar a la colección existente de Qdrant (hosteada en DigitalOcean).
+# Conectar a la colección existente de Qdrant.
 # from_existing_collection valida que la colección exista y lee su configuración.
 vectorstore = QdrantVectorStore.from_existing_collection(
     collection_name=COLLECTION_NAME,
     embedding=embedding_model,
-    url=QDRANT_URL,
+    url=_qdrant_url,
     api_key=QDRANT_API_KEY,
-    prefer_grpc=False,   # REST (puerto 6333); usa True si expones gRPC (6334)
+    port=_qdrant_port,
+    prefer_grpc=False,   # REST; usa True solo si expones gRPC (6334)
 )
 
 
