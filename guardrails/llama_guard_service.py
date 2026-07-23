@@ -150,6 +150,11 @@ class HybridSafetyService:
     # ----------------------------------------------------------
     # Capa 7: Llama Prompt Guard 2 — Jailbreak / Injection
     # ----------------------------------------------------------
+    # Umbral de decisión. Prompt Guard 2 devuelve la PROBABILIDAD de que el texto
+    # sea un ataque (0.0–1.0), no una etiqueta. 0.5 es la frontera por defecto;
+    # configurable por env para afinar sensibilidad vs. falsos positivos.
+    _PROMPT_GUARD_THRESHOLD = float(os.getenv("PROMPT_GUARD_THRESHOLD", "0.5"))
+
     def validate_jailbreak(
         self,
         message: str,
@@ -172,8 +177,23 @@ class HybridSafetyService:
         try:
             result = self._call_model("meta-llama/llama-prompt-guard-2-86m", message)
 
-            if "MALICIOUS" in result.upper():
-                logger.warning("[SAFETY] 🚨 Prompt Injection/Jailbreak detectado (Prompt Guard 2)")
+            # Prompt Guard 2 responde con la PROBABILIDAD de ataque como número
+            # (ej. '0.9995'), NO con la palabra 'MALICIOUS'. Parseamos ese score
+            # y aplicamos el umbral. (Antes se buscaba 'MALICIOUS' → nunca matcheaba
+            # y la capa quedaba como no-op dejando pasar todos los injections.)
+            try:
+                score = float(result.strip())
+                es_malicioso = score >= self._PROMPT_GUARD_THRESHOLD
+            except ValueError:
+                # Fallback defensivo por si el modelo devolviera una etiqueta textual.
+                low = result.strip().lower()
+                es_malicioso = ("malicious" in low) or (low in ("1", "label_1", "injection", "jailbreak"))
+                score = result.strip()
+
+            if es_malicioso:
+                logger.warning(
+                    f"[SAFETY] 🚨 Prompt Injection/Jailbreak detectado (Prompt Guard 2, score={score})"
+                )
                 return True, "jailbreak_ia"
 
             return False, ""

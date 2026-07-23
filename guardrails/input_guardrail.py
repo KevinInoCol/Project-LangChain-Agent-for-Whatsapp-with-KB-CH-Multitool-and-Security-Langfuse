@@ -152,6 +152,18 @@ PROMPT_INJECTION_PATTERNS: List[str] = [
     r"(?i)cuéntame\s+(tus?\s+)?instrucciones?",
     r"(?i)repite\s+(tu\s+)?(prompt|instrucciones?\s+originales?)",
 
+    # PROMPT EXTRACTION — refuerzos (huecos que Prompt Guard 2 no cubre)
+    # Verbo de solicitud + (lo que sea, acotado) + "prompt"
+    r"(?i)\b(dame|dime|entr[eé]game|p[aá]same|facil[ií]tame|comp[aá]rteme|ens[eé]ñame|proporci[oó]name|mu[eé]stra(me)?|revel[ae](me)?|repite|imprime|escribe|comparte|suelta|quiero\s+ver|quiero\s+saber|dame\s+a\s+conocer)\b.{0,25}\bprompt\b",
+    # "system prompt" / "prompt de(l) sistema" en cualquier contexto
+    r"(?i)\b(system\s+prompt|prompt\s+(de|del)\s+sistema)\b",
+    # Instrucciones CUALIFICADAS como de sistema/iniciales/originales (evita
+    # falsos positivos con "dame las instrucciones para inscribirme")
+    r"(?i)\binstruccion(es)?\s+(de\s+sistema|del\s+sistema|iniciales|originales|de\s+configuraci[oó]n)\b",
+    r"(?i)\b(system\s+instructions?|initial\s+instructions?)\b",
+    # "con el/la cual/que ... (has sido|fuiste) diseñado/creado/programado/entrenado"
+    r"(?i)\bcon\s+(el|la|lo)\s+(cual|que)\b.{0,25}\b(dise[nñ]ad|crea|program|entrena|construi|configura)",
+
     # DEVELOPER / DEBUG COMMANDS
     r"(?i)/debug",
     r"(?i)/admin",
