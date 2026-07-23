@@ -32,8 +32,7 @@ numpy                     # Cálculo de similitud coseno
 # ============================================
 # BASE DE CONOCIMIENTO (RAG con Pinecone)
 # ============================================
-langchain-pinecone        # Integración LangChain + Pinecone
-pinecone                  # Cliente Pinecone
+langchain-qdrant          # Integración LangChain + Qdrant (incluye qdrant-client)
 pypdf>=3.0.0              # Loader de PDFs (PyPDFLoader)
 
 # ============================================

@@ -1,6 +1,10 @@
 """
-Tool: Base de Conocimiento (RAG con Pinecone)
+Tool: Base de Conocimiento (RAG con Qdrant)
 Permite buscar información en la base de conocimientos de DATAPATH.
+
+Consume una colección existente de Qdrant (self-hosted en DigitalOcean) vía
+QDRANT_URL + QDRANT_API_KEY. La colección debe haberse creado con embeddings
+de 1536 dimensiones (text-embedding-ada-002) y distancia coseno.
 
 Autor: Ing. Kevin Inofuente Colque - DataPath
 """
@@ -9,27 +13,33 @@ import os
 from dotenv import load_dotenv, find_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.tools import tool
-from langchain_pinecone import PineconeVectorStore
+from langchain_qdrant import QdrantVectorStore
 
 load_dotenv(find_dotenv())
 
 # ============================================
-# CONFIGURACIÓN DE PINECONE
+# CONFIGURACIÓN DE QDRANT
 # ============================================
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "langchain-pinecone-asistente-de-ventas-ai15")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "datapath")
 
-if not PINECONE_API_KEY:
+if not QDRANT_URL:
     raise ValueError(
-        "❌ Falta variable PINECONE_API_KEY en .env"
+        "❌ Falta variable QDRANT_URL en .env "
+        "(ej. https://tu-servidor-qdrant:6333)"
     )
 
 embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
-# Conectar al índice existente de Pinecone
-vectorstore = PineconeVectorStore(
-    index_name=INDEX_NAME,
+# Conectar a la colección existente de Qdrant (hosteada en DigitalOcean).
+# from_existing_collection valida que la colección exista y lee su configuración.
+vectorstore = QdrantVectorStore.from_existing_collection(
+    collection_name=COLLECTION_NAME,
     embedding=embedding_model,
+    url=QDRANT_URL,
+    api_key=QDRANT_API_KEY,
+    prefer_grpc=False,   # REST (puerto 6333); usa True si expones gRPC (6334)
 )
 
 
